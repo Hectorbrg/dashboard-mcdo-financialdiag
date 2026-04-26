@@ -1,943 +1,622 @@
 """
-McDonald's Corporation — Executive Financial Dashboard
-======================================================
-Concise, visual-first companion to the underlying Excel analysis.
-FY 2023 / 2024 / 2025.
-
-Run with:
-    streamlit run app.py
+Shared styling and helpers for the McDonald's dashboard.
+Strict palette: Black / McDonald's European Green / McDonald's Yellow.
 """
+import base64
 from pathlib import Path
 
 import streamlit as st
 import plotly.graph_objects as go
 
-from data.financials import (
-    YEARS, INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW,
-    RATIOS, RATIO_BENCHMARKS, SWOT,
-)
-from utils import (
-    BLACK, GREEN, YELLOW, WHITE, OFF_WHITE,
-    DARK_GREY, MID_GREY, SOFT_GREY, SUBTLE, DIM_YELLOW,
-    PLOTLY_FONT,
-    fmt_money_m, fmt_pct, fmt_x, fmt_days, fmt_dollar, fmt_delta,
-    inject_global_css, render_brand_bar, section_divider,
-    kpi_card, callout,
-    base_layout, line_chart, bar_chart, donut_chart,
-    bullet_gauge, heatmap_matrix,
-    load_logo_data_uri,
-)
+
+# ============================================================
+# LOGO LOADER — looks for assets/mcdonalds_logo.png next to app.py
+# Returns a base64 data URI for inline embedding, or None if missing.
+# ============================================================
+@st.cache_resource
+def load_logo_data_uri():
+    here = Path(__file__).resolve().parent
+    candidates = [
+        here / "assets" / "mcdonalds_logo.png",
+        here / "assets" / "mcdonalds_logo.jpg",
+        here / "mcdonalds_logo.png",
+    ]
+    for p in candidates:
+        if p.exists():
+            mime = "image/jpeg" if p.suffix.lower() in (".jpg", ".jpeg") else "image/png"
+            return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode('ascii')}"
+    return None
 
 
-# =====================================================================
-# PAGE CONFIG — McDonald's logo as favicon when present
-# =====================================================================
-try:
-    _BASE_DIR = Path(__file__).resolve().parent
-except NameError:
-    _BASE_DIR = Path.cwd()
-_LOGO_FILE = _BASE_DIR / "assets" / "mcdonalds_logo.png"
-_FAVICON = str(_LOGO_FILE) if _LOGO_FILE.exists() else None
+# ============================================================
+# DESIGN SYSTEM — strict palette
+# ============================================================
+BLACK       = "#000000"
+GREEN       = "#008C42"   # McDonald's European Green
+YELLOW      = "#FFC72C"   # McDonald's Yellow
+WHITE       = "#FFFFFF"
+OFF_WHITE   = "#F2F2F2"
 
-st.set_page_config(
-    page_title="McDonald's · Financial Diagnosis FY23–25",
-    page_icon=_FAVICON,
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-inject_global_css()
+# Neutral greys (the only non-brand colours we allow)
+DARK_GREY   = "#141414"   # surfaces on black bg
+MID_GREY    = "#2A2A2A"   # borders / dividers
+SOFT_GREY   = "#3A3A3A"   # secondary surfaces / muted bars
+SUBTLE      = "#9A9A9A"   # secondary text
 
+# Cautionary tone — desaturated yellow (no red allowed by the brand)
+DIM_YELLOW  = "#7A5E1A"
 
-# =====================================================================
-# DATA HELPERS
-# =====================================================================
-@st.cache_data
-def get_data():
-    return {"is": INCOME_STATEMENT, "bs": BALANCE_SHEET,
-            "cf": CASH_FLOW, "ratios": RATIOS}
-
-D = get_data()
+PLOTLY_FONT = "Inter, 'Helvetica Neue', Arial, sans-serif"
 
 
-def row(book, key):
-    return D[book][key]
+# ============================================================
+# NUMBER FORMATTERS — defensive, always return a printable string
+# ============================================================
+def fmt_money_m(value):
+    """Input is in $M. Returns '$26.9B' for 26885 or '$774M' for 774."""
+    if value is None:
+        return "—"
+    abs_v = abs(value)
+    sign = "−" if value < 0 else ""
+    if abs_v >= 1000:
+        return f"{sign}${abs_v/1000:,.1f}B"
+    return f"{sign}${abs_v:,.0f}M"
 
 
-def value(book, key, year):
-    return D[book][key][YEARS.index(year)]
+def fmt_pct(value, decimals=1):
+    if value is None:
+        return "—"
+    return f"{value*100:,.{decimals}f}%"
 
 
-# =====================================================================
-# SIDEBAR — navigation + filters (no emojis)
-# =====================================================================
-with st.sidebar:
-    _logo_uri = load_logo_data_uri()
-    if _logo_uri:
-        _sidebar_mark = (
-            f'<img src="{_logo_uri}" alt="McDonald\'s" '
-            f'style="height:34px;width:auto;display:block;" />'
+def fmt_x(value, decimals=2):
+    if value is None:
+        return "—"
+    return f"{value:,.{decimals}f}×"
+
+
+def fmt_days(value, decimals=1):
+    if value is None:
+        return "—"
+    return f"{value:,.{decimals}f}d"
+
+
+def fmt_dollar(value, decimals=2):
+    """Plain dollar amount (not in $M)."""
+    if value is None:
+        return "—"
+    sign = "−" if value < 0 else ""
+    return f"{sign}${abs(value):,.{decimals}f}"
+
+
+def fmt_delta(curr, prev, mode="pct", inverse=False):
+    """Return (delta_text, direction) where direction in {'up','down','neutral'}."""
+    if curr is None or prev is None:
+        return "—", "neutral"
+    diff = curr - prev
+    if diff == 0:
+        return "0.0%" if mode == "pct" else "0.00", "neutral"
+    if mode == "pct":
+        if prev == 0:
+            return "—", "neutral"
+        text = f"{diff/abs(prev):+.1%}"
+    else:
+        text = f"{diff:+,.2f}"
+    is_good = (diff < 0) if inverse else (diff > 0)
+    return text, ("up" if is_good else "down")
+
+
+# ============================================================
+# CSS INJECTION
+# ============================================================
+GLOBAL_CSS = f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+html, body, [class*="css"] {{
+    font-family: {PLOTLY_FONT} !important;
+}}
+.stApp {{ background: {BLACK}; color: {OFF_WHITE}; }}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {{
+    background: {DARK_GREY};
+    border-right: 1px solid {MID_GREY};
+}}
+section[data-testid="stSidebar"] * {{ color: {OFF_WHITE}; }}
+
+/* Hide Streamlit chrome — keep header visible so sidebar toggle works */
+#MainMenu, footer {{ visibility: hidden; }}
+header[data-testid="stHeader"] {{ background: transparent !important; }}
+button[data-testid="stBaseButton-headerNoPadding"],
+button[kind="headerNoPadding"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {{
+    visibility: visible !important;
+    display: flex !important;
+    color: {YELLOW} !important;
+    z-index: 999999 !important;
+}}
+.block-container {{ padding-top: 1.2rem; padding-bottom: 3rem; max-width: 1280px; }}
+
+/* Headings */
+h1, h2, h3, h4 {{
+    font-family: {PLOTLY_FONT};
+    color: {WHITE};
+    letter-spacing: -0.01em;
+}}
+h1 {{ font-weight: 800; font-size: 2.1rem; letter-spacing: -0.02em; margin-bottom: 0.4rem; }}
+h2 {{ font-weight: 700; font-size: 1.35rem; margin-top: 2.2rem; margin-bottom: 0.6rem; color: {WHITE}; }}
+h3 {{
+    font-weight: 600; font-size: 0.78rem; color: {YELLOW};
+    text-transform: uppercase; letter-spacing: 0.16em;
+    margin-top: 1.4rem; margin-bottom: 0.4rem;
+}}
+p, li, label {{ color: {OFF_WHITE}; line-height: 1.55; }}
+
+/* Brand bar at the top */
+.brand-bar {{
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px;
+    background: {DARK_GREY};
+    border-bottom: 1px solid {YELLOW};
+    margin: -2.5rem -2.5rem 1.6rem -2.5rem;
+}}
+.brand-bar .logo-mark {{
+    display: inline-block;
+    width: 30px; height: 30px;
+    background: {YELLOW};
+    color: {BLACK};
+    text-align: center; line-height: 30px;
+    font-weight: 800; font-size: 17px;
+    border-radius: 2px;
+}}
+.brand-bar .brand-title {{
+    font-size: 12px; font-weight: 500;
+    color: {SUBTLE};
+    text-transform: uppercase; letter-spacing: 0.18em;
+}}
+
+/* KPI card */
+.kpi {{
+    background: {DARK_GREY};
+    border: 1px solid {MID_GREY};
+    border-top: 2px solid {YELLOW};
+    border-radius: 3px;
+    padding: 16px 18px 14px 18px;
+    height: 130px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    transition: border-top-color 0.2s ease;
+}}
+.kpi:hover {{ border-top-color: {GREEN}; }}
+.kpi .label {{
+    font-size: 10px; font-weight: 600;
+    color: {SUBTLE};
+    text-transform: uppercase; letter-spacing: 0.14em;
+}}
+.kpi .helper {{
+    font-size: 11px; color: {SUBTLE}; margin-top: 2px;
+}}
+.kpi .value {{
+    font-size: 1.75rem; font-weight: 700; color: {WHITE};
+    line-height: 1.1; letter-spacing: -0.02em;
+}}
+.kpi .delta {{
+    font-size: 0.78rem; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 4px;
+}}
+.kpi .delta.up      {{ color: {GREEN}; }}
+.kpi .delta.down    {{ color: {DIM_YELLOW}; }}
+.kpi .delta.neutral {{ color: {SUBTLE}; }}
+
+/* Callout / one-line insight */
+.callout {{
+    background: {DARK_GREY};
+    border-left: 2px solid {GREEN};
+    padding: 10px 14px;
+    margin: 4px 0 18px 0;
+    font-size: 0.88rem; color: {OFF_WHITE};
+    line-height: 1.5;
+}}
+.callout.warn {{ border-left-color: {YELLOW}; }}
+.callout strong {{ color: {YELLOW}; font-weight: 600; }}
+
+/* Compact gauge label */
+.gauge-label {{
+    color: {SUBTLE}; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 0;
+}}
+.gauge-delta {{
+    font-size: 0.78rem; font-weight: 500;
+    margin-top: -8px; margin-bottom: 14px;
+}}
+
+/* Section divider */
+.divider {{ height: 1px; background: {MID_GREY}; margin: 1.6rem 0; }}
+
+/* Multiselect tags use brand green */
+.stMultiSelect [data-baseweb="tag"] {{
+    background: {GREEN} !important; color: {WHITE} !important;
+}}
+
+/* Radio in sidebar */
+section[data-testid="stSidebar"] [role="radiogroup"] label {{
+    padding: 6px 6px;
+    border-radius: 2px;
+}}
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover {{
+    background: {MID_GREY};
+}}
+
+/* SWOT card */
+.swot {{
+    background: {DARK_GREY};
+    border: 1px solid {MID_GREY};
+    border-top: 2px solid {YELLOW};
+    border-radius: 3px;
+    padding: 18px 20px;
+    height: 100%;
+}}
+.swot.ok    {{ border-top-color: {GREEN}; }}
+.swot.warn  {{ border-top-color: {DIM_YELLOW}; }}
+.swot h4 {{
+    color: {YELLOW};
+    margin: 0 0 12px 0;
+    font-size: 0.78rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.14em;
+}}
+.swot.ok h4   {{ color: {GREEN}; }}
+.swot.warn h4 {{ color: {YELLOW}; }}
+.swot ul {{ list-style: none; padding: 0; margin: 0; }}
+.swot li {{
+    padding: 6px 0;
+    border-bottom: 1px solid {MID_GREY};
+    color: {OFF_WHITE}; font-size: 0.86rem; line-height: 1.45;
+}}
+.swot li:last-child {{ border-bottom: none; }}
+.swot li b {{ color: {WHITE}; font-weight: 600; }}
+</style>
+"""
+
+
+def inject_global_css():
+    st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+
+
+def render_brand_bar():
+    logo_uri = load_logo_data_uri()
+    if logo_uri:
+        logo_html = (
+            f'<img src="{logo_uri}" alt="McDonald\'s" '
+            f'style="height:36px;width:auto;display:block;" />'
         )
     else:
-        _sidebar_mark = (
-            f'<span style="display:inline-block;width:28px;height:28px;background:{YELLOW};'
-            f'color:{BLACK};text-align:center;line-height:28px;font-weight:800;'
-            f'font-size:15px;border-radius:2px;">M</span>'
-        )
+        logo_html = '<span class="logo-mark">M</span>'
     st.markdown(
         f"""
-        <div style="display:flex;align-items:center;gap:10px;margin:6px 0 10px 0;">
-            {_sidebar_mark}
-            <span style="font-size:10px;font-weight:600;color:{SUBTLE};
-                         text-transform:uppercase;letter-spacing:0.16em;line-height:1.3;">
-                Financial<br/>Diagnosis
-            </span>
+        <div class="brand-bar">
+            {logo_html}
+            <span class="brand-title">McDonald's Corporation &middot; Financial Diagnosis &middot; FY 2023–2025</span>
         </div>
-        <div style="height:1px;background:{MID_GREY};margin:14px 0 18px 0;"></div>
         """,
         unsafe_allow_html=True,
     )
 
-    PAGES = ["Overview", "Profitability", "Capital & Liquidity", "Verdict"]
-    page = st.radio("NAVIGATION", PAGES, label_visibility="collapsed")
 
-    st.markdown(
-        f"<div style='height:1px;background:{MID_GREY};margin:18px 0;'></div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"<div style='font-size:10px;font-weight:700;color:{YELLOW};"
-        f"letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;'>Filters</div>",
-        unsafe_allow_html=True,
-    )
-
-    selected_years = st.multiselect(
-        "Fiscal years",
-        options=YEARS,
-        default=YEARS,
-        help="Filter the years shown in trend charts.",
-    )
-    if not selected_years:
-        selected_years = YEARS
-
-    view_mode = st.radio(
-        "Display mode",
-        ["Absolute", "YoY % change"],
-        index=0,
-        help="Toggle dollar amounts vs year-over-year change.",
-    )
-
-    st.markdown(
-        f"<div style='height:1px;background:{MID_GREY};margin:22px 0 12px 0;'></div>"
-        f"<div style='font-size:10px;color:{SUBTLE};line-height:1.55;'>"
-        "Source: McDonald's 10-K filings, FY 2023–2025. All figures in USD millions "
-        "unless stated. The dashboard is a visual companion to the workbook."
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-# Working filter state
-FY = [y for y in YEARS if y in selected_years]
+def section_divider():
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 
 
-def filter_series(values):
-    """Return (years_filtered, values_filtered) honouring the year filter
-    and the absolute-vs-YoY toggle."""
-    if view_mode == "YoY % change":
-        full = [None] + [
-            None if (values[i-1] in (0, None) or values[i] is None)
-            else (values[i] - values[i-1]) / abs(values[i-1])
-            for i in range(1, len(values))
-        ]
-        out_y, out_v = [], []
-        for y in FY:
-            i = YEARS.index(y)
-            out_y.append(y)
-            out_v.append(full[i])
-        return out_y, out_v
-    pairs = [(y, values[YEARS.index(y)]) for y in FY]
-    return [p[0] for p in pairs], [p[1] for p in pairs]
+# ============================================================
+# KPI CARD
+# ============================================================
+def kpi_card(label, value, delta_text=None, delta_dir="neutral", helper=None):
+    arrow = {"up": "▲", "down": "▼", "neutral": "•"}.get(delta_dir, "•")
+    delta_html = ""
+    if delta_text and delta_text != "—":
+        delta_html = (
+            f"<div class='delta {delta_dir}'>{arrow}&nbsp;{delta_text}"
+            f"<span style='color:{SUBTLE};font-weight:400;'>&nbsp;YoY</span></div>"
+        )
+    elif delta_text == "—":
+        delta_html = f"<div class='delta neutral'>—</div>"
 
-
-# =====================================================================
-# RENDER
-# =====================================================================
-render_brand_bar()
-
-
-# ─────────────────────────────────────────────────────────────────────
-# PAGE 1 — OVERVIEW
-# ─────────────────────────────────────────────────────────────────────
-if page == "Overview":
+    helper_html = f"<div class='helper'>{helper}</div>" if helper else ""
     st.markdown(
         f"""
-        <h1>A capital-return franchise<br/>
-        <span style='color:{YELLOW};'>running on textbook discipline.</span></h1>
-        <p style='color:{SUBTLE};font-size:1rem;max-width:680px;margin-top:0;'>
-        Three years of consistent execution. Industry-leading margins, predictable cash flow,
-        and the entire operating surplus returned to shareholders.</p>
+        <div class="kpi">
+            <div>
+                <div class="label">{label}</div>
+                {helper_html}
+            </div>
+            <div>
+                <div class="value">{value}</div>
+                {delta_html}
+            </div>
+        </div>
         """,
         unsafe_allow_html=True,
     )
 
-    section_divider()
 
-    # ----- Hero KPIs -----
-    rev = row("is", "Total revenues")
-    ni  = row("is", "Net income")
-    op  = row("ratios", "Operating margin (EBIT / Revenue)")
-    fcf = row("cf",  "Free Cash Flow (CFO - CapEx)")
-    eps = row("is", "EPS — basic ($)")
-    div = row("is", "Dividends declared per share ($)")
-
-    cols = st.columns(3, gap="medium")
-    metrics_top = [
-        ("Total Revenue",    fmt_money_m(rev[-1]), *fmt_delta(rev[-1], rev[-2]), "FY 2025"),
-        ("Net Income",       fmt_money_m(ni[-1]),  *fmt_delta(ni[-1], ni[-2]),   "After tax"),
-        ("Operating Margin", fmt_pct(op[-1]),       *fmt_delta(op[-1], op[-2], mode="abs"), "EBIT / Revenue"),
-    ]
-    for col, m in zip(cols, metrics_top):
-        with col:
-            kpi_card(*m)
-
-    cols = st.columns(3, gap="medium")
-    metrics_bot = [
-        ("Free Cash Flow",   fmt_money_m(fcf[-1]),    *fmt_delta(fcf[-1], fcf[-2]), "CFO − CapEx"),
-        ("EPS (basic)",      fmt_dollar(eps[-1]),     *fmt_delta(eps[-1], eps[-2]), "Per share"),
-        ("Dividend / Share", fmt_dollar(div[-1]),     *fmt_delta(div[-1], div[-2]), "Declared"),
-    ]
-    for col, m in zip(cols, metrics_bot):
-        with col:
-            kpi_card(*m)
-
-    section_divider()
-
-    # ----- Two anchor charts -----
-    c1, c2 = st.columns(2, gap="large")
-
-    with c1:
-        st.markdown("### Revenue & Operating Income")
-        years_out, rev_out = filter_series(rev)
-        _,         opi_out = filter_series(row("is", "Operating income (EBIT)"))
-        if view_mode == "YoY % change":
-            fig = line_chart(years_out, {"Revenue": rev_out, "Operating income": opi_out},
-                             y_format=".1%", height=300)
-        else:
-            fig = bar_chart(years_out, {"Revenue": rev_out, "Operating income": opi_out},
-                            y_format="$B", height=300)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        callout(
-            f"Operating income grew <strong>+5.8%</strong> against +3.7% revenue in FY25 "
-            f"— positive operating leverage, the signature of a healthy franchise model."
-        )
-
-    with c2:
-        st.markdown("### Three-margin trio")
-        op_m  = row("ratios", "Operating margin (EBIT / Revenue)")
-        ebd_m = row("ratios", "EBITDA margin")
-        net_m = row("ratios", "Net margin (Net income / Revenue)")
-        years_out, op_out  = filter_series(op_m)
-        _, ebd_out = filter_series(ebd_m)
-        _, net_out = filter_series(net_m)
-        fig = line_chart(
-            years_out,
-            {"EBITDA margin": ebd_out, "Operating margin": op_out, "Net margin": net_out},
-            y_format=".1%", height=300,
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        callout(
-            "All three margins expanded in FY25. <strong>46% operating margin</strong> "
-            "and <strong>48% EBITDA margin</strong> — best-in-class for any consumer business."
-        )
-
-    section_divider()
-
-    # ----- The negative-equity teaching moment (signature visual) -----
-    st.markdown("### Why book equity is negative")
-    c1, c2 = st.columns([1.4, 1], gap="large")
-
-    with c1:
-        retained = row("bs", "Retained earnings")
-        treasury = row("bs", "Common stock in treasury, at cost")
-        equity   = row("bs", "Total shareholders' equity (deficit)")
-        years_out = [y for y in YEARS if y in FY]
-        re_out = [retained[YEARS.index(y)] for y in years_out]
-        tr_out = [treasury[YEARS.index(y)] for y in years_out]
-        eq_out = [equity[YEARS.index(y)]   for y in years_out]
-
-        # Display in $B — values stored in $M, divide by 1000
-        re_b = [v / 1000 for v in re_out]
-        tr_b = [v / 1000 for v in tr_out]
-        eq_b = [v / 1000 for v in eq_out]
-
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            name="Retained earnings", x=years_out, y=re_b,
-            marker_color=GREEN, marker_line_width=0,
-            hovertemplate="<b>%{x}</b><br>Retained earnings: $%{y:.2f}B<extra></extra>",
-        ))
-        fig.add_trace(go.Bar(
-            name="Treasury stock (buybacks)", x=years_out, y=tr_b,
-            marker_color=DIM_YELLOW, marker_line_width=0,
-            hovertemplate="<b>%{x}</b><br>Treasury stock: $%{y:.2f}B<extra></extra>",
-        ))
-        fig.add_trace(go.Scatter(
-            name="Total equity", x=years_out, y=eq_b,
-            mode="lines+markers+text",
-            line=dict(color=YELLOW, width=3, dash="dot"),
-            marker=dict(size=11, color=YELLOW, line=dict(color=BLACK, width=2)),
-            text=[fmt_money_m(v) for v in eq_out],
-            textposition="top center",
-            textfont=dict(color=YELLOW, size=11, family=PLOTLY_FONT),
-            hovertemplate="<b>%{x}</b><br>Total equity: $%{y:.2f}B<extra></extra>",
-        ))
-        layout = base_layout(height=380)
-        layout["barmode"] = "relative"
-        layout["xaxis"]["tickmode"] = "array"
-        layout["xaxis"]["tickvals"] = years_out
-        layout["yaxis"]["tickformat"] = "$,.0f"
-        layout["yaxis"]["ticksuffix"] = "B"
-        fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    with c2:
-        st.markdown(
-            f"""
-            <div style="padding:10px 0 0 0;">
-                <div style="font-size:0.78rem;font-weight:700;color:{YELLOW};
-                            letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;">
-                    The mechanic
-                </div>
-                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
-                    <span style="font-size:2.2rem;font-weight:800;color:{GREEN};
-                                letter-spacing:-0.02em;">$70B</span>
-                    <span style="color:{SUBTLE};font-size:0.9rem;">retained earnings</span>
-                </div>
-                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px;">
-                    <span style="font-size:2.2rem;font-weight:800;color:{DIM_YELLOW};
-                                letter-spacing:-0.02em;">−$79B</span>
-                    <span style="color:{SUBTLE};font-size:0.9rem;">treasury stock</span>
-                </div>
-                <div style="height:1px;background:{MID_GREY};margin:8px 0 14px 0;"></div>
-                <p style="color:{OFF_WHITE};font-size:0.92rem;line-height:1.55;margin:0;">
-                Cumulative buybacks now exceed cumulative profits. Equity is negative by design,
-                not by distress. <strong style='color:{YELLOW};'>ROE, D/E and P/B are
-                mathematically meaningless</strong> — replaced here by ROCE, ROA, and Net Debt/EBITDA.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+def callout(text, kind="default"):
+    """Single-line insight under a chart. kind in {'default','warn'}."""
+    cls = "callout" + (" warn" if kind == "warn" else "")
+    st.markdown(f"<div class='{cls}'>{text}</div>", unsafe_allow_html=True)
 
 
-# ─────────────────────────────────────────────────────────────────────
-# PAGE 2 — PROFITABILITY
-# ─────────────────────────────────────────────────────────────────────
-elif page == "Profitability":
-    st.markdown("<h1>Profitability & Returns</h1>", unsafe_allow_html=True)
-    st.markdown(
-        f"<p style='color:{SUBTLE};font-size:0.95rem;max-width:660px;margin-top:-4px;'>"
-        "How efficiently revenue becomes operating profit, cash, and shareholder return."
-        "</p>",
-        unsafe_allow_html=True,
-    )
-
-    section_divider()
-
-    # ----- KPI strip -----
-    cols = st.columns(4, gap="medium")
-    metrics = [
-        ("Operating margin", fmt_pct(row("ratios", "Operating margin (EBIT / Revenue)")[-1]),
-         *fmt_delta(row("ratios", "Operating margin (EBIT / Revenue)")[-1],
-                    row("ratios", "Operating margin (EBIT / Revenue)")[-2], mode="abs"),
-         "EBIT / Revenue"),
-        ("EBITDA margin", fmt_pct(row("ratios", "EBITDA margin")[-1]),
-         *fmt_delta(row("ratios", "EBITDA margin")[-1],
-                    row("ratios", "EBITDA margin")[-2], mode="abs"),
-         "Pre-financing"),
-        ("ROCE", fmt_pct(row("ratios", "ROCE (NOPAT / Capital Employed)")[-1]),
-         *fmt_delta(row("ratios", "ROCE (NOPAT / Capital Employed)")[-1],
-                    row("ratios", "ROCE (NOPAT / Capital Employed)")[-2], mode="abs"),
-         "NOPAT / Capital empl."),
-        ("ROA", fmt_pct(row("ratios", "ROA (Net income / Total assets)")[-1]),
-         *fmt_delta(row("ratios", "ROA (Net income / Total assets)")[-1],
-                    row("ratios", "ROA (Net income / Total assets)")[-2], mode="abs"),
-         "Net income / Assets"),
-    ]
-    for col, m in zip(cols, metrics):
-        with col:
-            kpi_card(*m)
-
-    section_divider()
-
-    # ----- Margin gauges (3-up) -----
-    st.markdown("### Margins vs benchmark zones")
-    cols = st.columns(3, gap="large")
-    margin_ratios = [
-        "Operating margin (EBIT / Revenue)",
-        "EBITDA margin",
-        "Net margin (Net income / Revenue)",
-    ]
-    for col, ratio_name in zip(cols, margin_ratios):
-        with col:
-            v = row("ratios", ratio_name)[-1]
-            v_prev = row("ratios", ratio_name)[-2]
-            b = RATIO_BENCHMARKS[ratio_name]
-            st.markdown(
-                f"<div class='gauge-label'>{ratio_name.split(' (')[0]}</div>",
-                unsafe_allow_html=True,
-            )
-            fig = bullet_gauge(
-                v, b["zones"], b["ideal"],
-                value_format="percent",
-                higher_is_better=b["higher_is_better"],
-                height=110,
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            d_txt, d_dir = fmt_delta(v, v_prev, mode="abs")
-            arrow = {"up":"▲","down":"▼","neutral":"•"}[d_dir]
-            color = {"up":GREEN,"down":DIM_YELLOW,"neutral":SUBTLE}[d_dir]
-            st.markdown(
-                f"<div class='gauge-delta' style='color:{color};'>"
-                f"{arrow}&nbsp;{d_txt} vs FY24</div>",
-                unsafe_allow_html=True,
-            )
-
-    callout(
-        "Three-margin lift in FY25. Yellow tick on each gauge sits inside the green ideal "
-        "zone — McDonald's runs in the top decile of any restaurant or consumer business."
-    )
-
-    section_divider()
-
-    # ----- ROCE / ROA gauges -----
-    st.markdown("### Returns on capital")
-    c1, c2 = st.columns(2, gap="large")
-    for col, ratio_name in zip([c1, c2],
-        ["ROCE (NOPAT / Capital Employed)", "ROA (Net income / Total assets)"]):
-        with col:
-            v = row("ratios", ratio_name)[-1]
-            v_prev = row("ratios", ratio_name)[-2]
-            b = RATIO_BENCHMARKS[ratio_name]
-            st.markdown(
-                f"<div class='gauge-label'>{ratio_name.split(' (')[0]}</div>",
-                unsafe_allow_html=True,
-            )
-            fig = bullet_gauge(
-                v, b["zones"], b["ideal"],
-                value_format="percent",
-                higher_is_better=True, height=110,
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            d_txt, d_dir = fmt_delta(v, v_prev, mode="abs")
-            arrow = {"up":"▲","down":"▼","neutral":"•"}[d_dir]
-            color = {"up":GREEN,"down":DIM_YELLOW,"neutral":SUBTLE}[d_dir]
-            st.markdown(
-                f"<div class='gauge-delta' style='color:{color};'>"
-                f"{arrow}&nbsp;{d_txt} vs FY24</div>",
-                unsafe_allow_html=True,
-            )
-
-    callout(
-        f"<strong>16% ROCE</strong> against ~7% cost of capital — every dollar deployed earns "
-        "~9 percentage points of economic spread. ROE is intentionally omitted (negative equity)."
-    )
-
-    section_divider()
-
-    # ----- Capital return machine -----
-    st.markdown("### The capital-return machine")
-    c1, c2 = st.columns([1.4, 1], gap="large")
-    with c1:
-        years_out = [y for y in YEARS if y in FY]
-        divs = [-value("cf", "Common stock dividends", y) for y in years_out]
-        bbk  = [-value("cf", "Treasury stock purchases", y) for y in years_out]
-        fcf_v = [value("cf", "Free Cash Flow (CFO - CapEx)", y) for y in years_out]
-
-        # Convert all series to $B for display
-        divs_b = [v / 1000 for v in divs]
-        bbk_b  = [v / 1000 for v in bbk]
-        fcf_b  = [v / 1000 for v in fcf_v]
-
-        fig = go.Figure()
-        fig.add_trace(go.Bar(name="Dividends", x=years_out, y=divs_b,
-                             marker_color=GREEN, marker_line_width=0,
-                             hovertemplate="<b>%{x}</b><br>Dividends: $%{y:.2f}B<extra></extra>"))
-        fig.add_trace(go.Bar(name="Buybacks", x=years_out, y=bbk_b,
-                             marker_color=YELLOW, marker_line_width=0,
-                             hovertemplate="<b>%{x}</b><br>Buybacks: $%{y:.2f}B<extra></extra>"))
-        fig.add_trace(go.Scatter(name="Free Cash Flow", x=years_out, y=fcf_b,
-                                 mode="lines+markers+text",
-                                 line=dict(color=WHITE, width=3, dash="dot"),
-                                 marker=dict(size=10, color=WHITE,
-                                            line=dict(color=BLACK, width=2)),
-                                 text=[fmt_money_m(v) for v in fcf_v],
-                                 textposition="top center",
-                                 textfont=dict(color=WHITE, size=11, family=PLOTLY_FONT),
-                                 hovertemplate="<b>%{x}</b><br>FCF: $%{y:.2f}B<extra></extra>"))
-        layout = base_layout(height=380)
-        layout["barmode"] = "stack"
-        layout["xaxis"]["tickmode"] = "array"
-        layout["xaxis"]["tickvals"] = years_out
-        layout["yaxis"]["tickformat"] = "$,.1f"
-        layout["yaxis"]["ticksuffix"] = "B"
-        fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    with c2:
-        total_returned = (
-            -row("cf", "Common stock dividends")[-1]
-            -row("cf", "Treasury stock purchases")[-1]
-        )
-        cur_fcf = row("cf", "Free Cash Flow (CFO - CapEx)")[-1]
-        coverage = total_returned / cur_fcf
-        payout = row("ratios", "Dividend payout ratio")[-1]
-        yield_ = row("ratios", "Dividend yield")[-1]
-        st.markdown(
-            f"""
-            <div style='padding:10px 0;'>
-                <div style='color:{SUBTLE};font-size:0.78rem;font-weight:600;
-                            letter-spacing:0.16em;text-transform:uppercase;'>FY 2025</div>
-                <div style='font-size:2.4rem;font-weight:800;color:{YELLOW};
-                            line-height:1.1;letter-spacing:-0.02em;'>
-                    {fmt_money_m(total_returned)}</div>
-                <div style='color:{OFF_WHITE};font-size:0.92rem;margin-top:4px;'>
-                    returned to shareholders<br/>
-                    <span style='color:{SUBTLE};'>({coverage*100:.0f}% of FCF)</span>
-                </div>
-                <div style='height:1px;background:{MID_GREY};margin:18px 0;'></div>
-                <div style='display:flex;justify-content:space-between;
-                            color:{OFF_WHITE};font-size:0.88rem;margin-bottom:8px;'>
-                    <span>Payout ratio</span>
-                    <span style='color:{YELLOW};font-weight:600;'>{payout*100:.0f}%</span>
-                </div>
-                <div style='display:flex;justify-content:space-between;
-                            color:{OFF_WHITE};font-size:0.88rem;margin-bottom:8px;'>
-                    <span>Dividend yield</span>
-                    <span style='color:{YELLOW};font-weight:600;'>{yield_*100:.2f}%</span>
-                </div>
-                <div style='display:flex;justify-content:space-between;
-                            color:{OFF_WHITE};font-size:0.88rem;'>
-                    <span>Buyback yield</span>
-                    <span style='color:{YELLOW};font-weight:600;'>~1.0%</span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    callout(
-        "Capital returned absorbs the entire free cash flow every year — the very mechanism "
-        "that drives book equity negative.",
-        kind="warn",
-    )
-
-    section_divider()
-
-    # ----- Revenue mix (franchised vs company-owned) -----
-    st.markdown("### Revenue mix — franchise model in action")
-    c1, c2 = st.columns([1, 1], gap="large")
-    with c1:
-        years_out = [y for y in YEARS if y in FY]
-        franchised = [value("is", "Revenues from franchised restaurants", y) for y in years_out]
-        company    = [value("is", "Sales by Company-owned and operated restaurants", y) for y in years_out]
-        other      = [value("is", "Other revenues", y) for y in years_out]
-        fig = bar_chart(
-            years_out,
-            {"Franchised": franchised, "Company-owned": company, "Other": other},
-            y_format="$B", height=320, mode="stack",
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    with c2:
-        fig = donut_chart(
-            ["Franchised", "Company-owned", "Other"],
-            [row("is", "Revenues from franchised restaurants")[-1],
-             row("is", "Sales by Company-owned and operated restaurants")[-1],
-             row("is", "Other revenues")[-1]],
-            height=320,
-            colors=[GREEN, YELLOW, SOFT_GREY],
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    callout(
-        "Franchised revenue grew <strong>+5.3%</strong> while company-owned sales declined "
-        "slightly. The asset-light, royalty-heavy mix continues to deepen — and so do the margins."
+# ============================================================
+# PLOTLY BASE LAYOUT
+# ============================================================
+def base_layout(height=360, show_legend=True):
+    return dict(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=PLOTLY_FONT, color=OFF_WHITE, size=12),
+        margin=dict(l=10, r=10, t=22, b=30),
+        height=height,
+        showlegend=show_legend,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(color=OFF_WHITE, size=11),
+        ),
+        xaxis=dict(
+            showgrid=False, zeroline=False,
+            color=SUBTLE, linecolor=MID_GREY,
+            tickfont=dict(color=OFF_WHITE),
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor=MID_GREY, gridwidth=0.5, zeroline=False,
+            color=SUBTLE, tickfont=dict(color=OFF_WHITE),
+        ),
+        hoverlabel=dict(
+            bgcolor=DARK_GREY, bordercolor=YELLOW,
+            font=dict(color=WHITE, family=PLOTLY_FONT),
+        ),
     )
 
 
-# ─────────────────────────────────────────────────────────────────────
-# PAGE 3 — CAPITAL & LIQUIDITY
-# ─────────────────────────────────────────────────────────────────────
-elif page == "Capital & Liquidity":
-    st.markdown("<h1>Capital & Liquidity</h1>", unsafe_allow_html=True)
-    st.markdown(
-        f"<p style='color:{SUBTLE};font-size:0.95rem;max-width:680px;margin-top:-4px;'>"
-        "Solvency, working capital, and the operating-cycle mechanics behind sub-1 liquidity ratios."
-        "</p>",
-        unsafe_allow_html=True,
-    )
+# ============================================================
+# CHART HELPERS
+# ============================================================
+def _safe(values):
+    """Replace None with 0 for plotting; return mask of valid points too."""
+    return [0 if v is None else v for v in values]
 
-    section_divider()
 
-    # ----- KPI strip -----
-    cols = st.columns(4, gap="medium")
-    metrics = [
-        ("Current ratio", fmt_x(row("ratios", "Current ratio")[-1]),
-         *fmt_delta(row("ratios", "Current ratio")[-1],
-                    row("ratios", "Current ratio")[-2], mode="abs"),
-         "Sub-1 by design"),
-        ("Net Debt / EBITDA", fmt_x(row("ratios", "Net Debt / EBITDA")[-1]),
-         *fmt_delta(row("ratios", "Net Debt / EBITDA")[-1],
-                    row("ratios", "Net Debt / EBITDA")[-2], mode="abs", inverse=True),
-         "Years of EBITDA"),
-        ("Interest coverage", fmt_x(row("ratios", "Interest coverage (EBIT / Interest)")[-1]),
-         *fmt_delta(row("ratios", "Interest coverage (EBIT / Interest)")[-1],
-                    row("ratios", "Interest coverage (EBIT / Interest)")[-2], mode="abs"),
-         "EBIT / Interest"),
-        ("Cash Conversion Cycle", fmt_days(row("ratios", "Cash Conversion Cycle (CCC)")[-1]),
-         *fmt_delta(row("ratios", "Cash Conversion Cycle (CCC)")[-1],
-                    row("ratios", "Cash Conversion Cycle (CCC)")[-2], mode="abs", inverse=True),
-         "Negative is great"),
-    ]
-    for col, m in zip(cols, metrics):
-        with col:
-            kpi_card(*m)
+def line_chart(years, series_dict, y_format="$,.0f", height=320):
+    """series_dict: {label: [values]} — colours cycle YELLOW → GREEN → WHITE."""
+    palette = [YELLOW, GREEN, WHITE]
 
-    section_divider()
-
-    # ----- Liquidity gauges -----
-    st.markdown("### Short-term liquidity")
-    cols = st.columns(3, gap="large")
-    liquidity_ratios = ["Current ratio", "Quick ratio", "Cash ratio"]
-    for col, ratio_name in zip(cols, liquidity_ratios):
-        with col:
-            v = row("ratios", ratio_name)[-1]
-            v_prev = row("ratios", ratio_name)[-2]
-            b = RATIO_BENCHMARKS[ratio_name]
-            st.markdown(
-                f"<div class='gauge-label'>{ratio_name}</div>",
-                unsafe_allow_html=True,
-            )
-            fig = bullet_gauge(
-                v, b["zones"], b["ideal"],
-                value_format="x",
-                higher_is_better=b["higher_is_better"], height=110,
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            d_txt, d_dir = fmt_delta(v, v_prev, mode="abs")
-            arrow = {"up":"▲","down":"▼","neutral":"•"}[d_dir]
-            color = {"up":GREEN,"down":DIM_YELLOW,"neutral":SUBTLE}[d_dir]
-            st.markdown(
-                f"<div class='gauge-delta' style='color:{color};'>"
-                f"{arrow}&nbsp;{d_txt} vs FY24</div>",
-                unsafe_allow_html=True,
-            )
-
-    callout(
-        "All three gauges below their textbook ideal — but this is deliberate cash deployment, "
-        "not deteriorating operations. <strong>Idle cash fell from $4.6B to $0.8B</strong> as "
-        "the surplus was channelled into buybacks and dividends.",
-        kind="warn",
-    )
-
-    section_divider()
-
-    # ----- Working capital paradox -----
-    st.markdown("### The working-capital paradox")
-    c1, c2 = st.columns([1.3, 1], gap="large")
-    with c1:
-        years_out = [y for y in YEARS if y in FY]
-        wc  = [value("ratios", "Working Capital ($m)", y) for y in years_out]
-        wcn = [value("ratios", "Working Capital Need / WCN ($m)", y) for y in years_out]
-        nc  = [value("ratios", "Net Cash position ($m)", y) for y in years_out]
-
-        # Convert to $B for display
-        wc_b  = [v / 1000 for v in wc]
-        wcn_b = [v / 1000 for v in wcn]
-        nc_b  = [v / 1000 for v in nc]
-
-        fig = go.Figure()
-        for label, vals_b, color in [
-            ("Working Capital", wc_b, YELLOW),
-            ("WCN (negative = good)", wcn_b, GREEN),
-            ("Net Cash", nc_b, SOFT_GREY),
-        ]:
-            fig.add_trace(go.Bar(
-                x=years_out, y=vals_b, name=label,
-                marker_color=color, marker_line_width=0,
-                hovertemplate="<b>%{x}</b><br>" + label + ": $%{y:.2f}B<extra></extra>",
-            ))
-        layout = base_layout(height=340)
-        layout["barmode"] = "group"
-        layout["bargap"] = 0.35
-        layout["xaxis"]["tickmode"] = "array"
-        layout["xaxis"]["tickvals"] = years_out
-        layout["yaxis"]["tickformat"] = "$,.1f"
-        layout["yaxis"]["ticksuffix"] = "B"
-        fig.update_layout(**layout)
-        fig.add_hline(y=0, line_color=MID_GREY, line_width=1)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    with c2:
-        wcn_curr = row("ratios", "Working Capital Need / WCN ($m)")[-1]
-        st.markdown(
-            f"""
-            <div style='padding:10px 0;'>
-                <div style='font-size:0.78rem;font-weight:700;color:{YELLOW};
-                            letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;'>
-                    Free float engine
-                </div>
-                <div style='font-size:2.4rem;font-weight:800;color:{GREEN};
-                            line-height:1.1;letter-spacing:-0.02em;'>
-                    {fmt_money_m(wcn_curr)}
-                </div>
-                <div style='color:{OFF_WHITE};font-size:0.92rem;margin-top:4px;'>
-                    of permanent, interest-free<br/>supplier financing
-                </div>
-                <div style='height:1px;background:{MID_GREY};margin:16px 0;'></div>
-                <p style='color:{OFF_WHITE};font-size:0.88rem;line-height:1.55;margin:0;'>
-                Customers pay instantly via card and app. Inventory turns in a week. Suppliers
-                wait 60–75 days. The gap is funded <em>by</em> the operating cycle, not <em>through</em> it.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    section_divider()
-
-    # ----- CCC decomposition -----
-    st.markdown("### Cash Conversion Cycle decomposition")
-    years_out = [y for y in YEARS if y in FY]
-    dso = [value("ratios", "Days Sales Outstanding (DSO)", y) for y in years_out]
-    dio = [value("ratios", "Days Inventory Outstanding (DIO)", y) for y in years_out]
-    dpo = [-value("ratios", "Days Payable Outstanding (DPO)", y) for y in years_out]
-    ccc = [value("ratios", "Cash Conversion Cycle (CCC)", y) for y in years_out]
+    if y_format == "$B":
+        scale = 1000.0
+        axis_tickformat = "$,.1f"
+        axis_ticksuffix = "B"
+        hover_fmt = "$%{y:.2f}B"
+    else:
+        scale = 1.0
+        axis_tickformat = y_format
+        axis_ticksuffix = ""
+        hover_fmt = "%{y:" + y_format + "}"
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(name="DSO (collecting)", x=years_out, y=dso,
-                         marker_color=YELLOW, marker_line_width=0,
-                         hovertemplate="<b>%{x}</b><br>DSO: %{y:.1f}d<extra></extra>"))
-    fig.add_trace(go.Bar(name="DIO (inventory)", x=years_out, y=dio,
-                         marker_color=GREEN, marker_line_width=0,
-                         hovertemplate="<b>%{x}</b><br>DIO: %{y:.1f}d<extra></extra>"))
-    fig.add_trace(go.Bar(name="−DPO (paying suppliers)", x=years_out, y=dpo,
-                         marker_color=DIM_YELLOW, marker_line_width=0,
-                         hovertemplate="<b>%{x}</b><br>DPO: %{y:.1f}d<extra></extra>"))
-    fig.add_trace(go.Scatter(name="CCC", x=years_out, y=ccc,
-                             mode="lines+markers+text",
-                             line=dict(color=WHITE, width=3),
-                             marker=dict(size=12, color=WHITE,
-                                        line=dict(color=BLACK, width=2)),
-                             text=[f"{v:.1f}d" for v in ccc],
-                             textposition="bottom center",
-                             textfont=dict(color=WHITE, size=11, family=PLOTLY_FONT),
-                             hovertemplate="<b>%{x}</b><br>CCC: %{y:.1f}d<extra></extra>"))
-    layout = base_layout(height=380)
-    layout["barmode"] = "relative"
+    for i, (label, values) in enumerate(series_dict.items()):
+        c = palette[i % len(palette)]
+        # Drop None pairs so the line doesn't crash; scale the remaining points
+        clean_x = [x for x, v in zip(years, values) if v is not None]
+        clean_y = [v / scale for v in values if v is not None]
+        if not clean_y:
+            continue
+        fig.add_trace(go.Scatter(
+            x=clean_x, y=clean_y, mode="lines+markers",
+            name=label,
+            line=dict(color=c, width=3),
+            marker=dict(size=10, color=c, line=dict(color=BLACK, width=2)),
+            hovertemplate="<b>%{x}</b><br>" + label + ": " + hover_fmt + "<extra></extra>",
+        ))
+    layout = base_layout(height=height)
     layout["xaxis"]["tickmode"] = "array"
-    layout["xaxis"]["tickvals"] = years_out
-    layout["yaxis"]["ticksuffix"] = "d"
+    layout["xaxis"]["tickvals"] = years
+    layout["yaxis"]["tickformat"] = axis_tickformat
+    if axis_ticksuffix:
+        layout["yaxis"]["ticksuffix"] = axis_ticksuffix
     fig.update_layout(**layout)
-    fig.add_hline(y=0, line_color=MID_GREY, line_width=1)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    callout(
-        "CCC has deepened to <strong>−33 days</strong> in FY25. McDonald's gets paid 33 days "
-        "before paying its suppliers — translating directly into the ~$1.8B of free float."
+    return fig
+
+
+def bar_chart(years, series_dict, y_format="$,.0f", height=320, mode="group"):
+    palette = [YELLOW, GREEN, SOFT_GREY]
+
+    # "$B" is a special mode: input values are in $M, axis displays in billions.
+    if y_format == "$B":
+        scale = 1000.0
+        axis_tickformat = "$,.1f"
+        axis_ticksuffix = "B"
+        hover_fmt = "$%{y:.2f}B"
+    else:
+        scale = 1.0
+        axis_tickformat = y_format
+        axis_ticksuffix = ""
+        hover_fmt = "%{y:" + y_format + "}"
+
+    fig = go.Figure()
+    for i, (label, values) in enumerate(series_dict.items()):
+        c = palette[i % len(palette)]
+        scaled = [(0 if v is None else v) / scale for v in values]
+        fig.add_trace(go.Bar(
+            x=years, y=scaled, name=label,
+            marker_color=c, marker_line_width=0,
+            hovertemplate="<b>%{x}</b><br>" + label + ": " + hover_fmt + "<extra></extra>",
+        ))
+    layout = base_layout(height=height)
+    layout["barmode"] = mode
+    layout["bargap"] = 0.40
+    layout["xaxis"]["tickmode"] = "array"
+    layout["xaxis"]["tickvals"] = years
+    layout["yaxis"]["tickformat"] = axis_tickformat
+    if axis_ticksuffix:
+        layout["yaxis"]["ticksuffix"] = axis_ticksuffix
+    fig.update_layout(**layout)
+    return fig
+
+
+def donut_chart(labels, values, height=300, colors=None):
+    if colors is None:
+        colors = [GREEN, YELLOW, SOFT_GREY, MID_GREY]
+    # Convert from $M to $B for both display and hover
+    values_b = [(v / 1000.0) if v is not None else 0 for v in values]
+    total_b = sum(values_b)
+    fig = go.Figure(go.Pie(
+        labels=labels, values=values_b, hole=0.65,
+        marker=dict(colors=colors, line=dict(color=BLACK, width=2)),
+        textinfo="label+percent",
+        textfont=dict(color=WHITE, size=11, family=PLOTLY_FONT),
+        hovertemplate="<b>%{label}</b><br>$%{value:.2f}B (%{percent})<extra></extra>",
+        sort=False,
+    ))
+    layout = base_layout(height=height, show_legend=False)
+    layout["margin"] = dict(l=10, r=10, t=10, b=10)
+    fig.update_layout(**layout)
+    fig.add_annotation(
+        text=f"<b>${total_b:,.1f}B</b><br><span style='font-size:10px;color:{SUBTLE}'>TOTAL</span>",
+        x=0.5, y=0.5, showarrow=False,
+        font=dict(color=WHITE, size=18, family=PLOTLY_FONT),
     )
+    return fig
 
-    section_divider()
 
-    # ----- Solvency gauges -----
-    st.markdown("### Long-term solvency")
-    cols = st.columns(2, gap="large")
-    solvency_ratios = ["Interest coverage (EBIT / Interest)", "Net Debt / EBITDA"]
-    for col, ratio_name in zip(cols, solvency_ratios):
-        with col:
-            v = row("ratios", ratio_name)[-1]
-            v_prev = row("ratios", ratio_name)[-2]
-            b = RATIO_BENCHMARKS[ratio_name]
-            st.markdown(
-                f"<div class='gauge-label'>{ratio_name}</div>",
-                unsafe_allow_html=True,
-            )
-            fig = bullet_gauge(
-                v, b["zones"], b["ideal"],
-                value_format="x",
-                higher_is_better=b["higher_is_better"], height=110,
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            inverse = not b["higher_is_better"]
-            d_txt, d_dir = fmt_delta(v, v_prev, mode="abs", inverse=inverse)
-            arrow = {"up":"▲","down":"▼","neutral":"•"}[d_dir]
-            color = {"up":GREEN,"down":DIM_YELLOW,"neutral":SUBTLE}[d_dir]
-            st.markdown(
-                f"<div class='gauge-delta' style='color:{color};'>"
-                f"{arrow}&nbsp;{d_txt} vs FY24</div>",
-                unsafe_allow_html=True,
-            )
+def bullet_gauge(value, zones, ideal_range, value_format="number",
+                 higher_is_better=True, height=100):
+    """Horizontal gauge with three benchmark zones (dim → mid → bright)
+    and a marker for the actual value."""
+    z0, z1, z2, z3 = zones
+    # Zone tints — only green/yellow/dim-yellow allowed
+    if higher_is_better:
+        zone_colors = [
+            "rgba(122,94,26,0.45)",   # weak (dim yellow)
+            "rgba(255,199,44,0.40)",  # mid (yellow)
+            "rgba(0,140,66,0.50)",    # strong (green)
+        ]
+    else:
+        zone_colors = [
+            "rgba(0,140,66,0.50)",    # strong (green) — low values are good
+            "rgba(255,199,44,0.40)",  # mid
+            "rgba(122,94,26,0.45)",   # weak
+        ]
 
-    callout(
-        "<strong>7.8× interest coverage</strong> is fortress-strong. "
-        "<strong>Net Debt/EBITDA at 4.4×</strong> is elevated — McDonald's runs more leverage than "
-        "typical because royalty cash flows behave more like a REIT than a restaurant chain."
+    if value_format == "percent":
+        display_val = "—" if value is None else f"{value*100:.1f}%"
+    elif value_format == "x":
+        display_val = "—" if value is None else f"{value:.2f}×"
+    elif value_format == "days":
+        display_val = "—" if value is None else f"{value:.1f}d"
+    else:
+        display_val = "—" if value is None else f"{value:,.2f}"
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=[z1 - z0], y=[0], orientation="h", base=z0,
+                         marker=dict(color=zone_colors[0]),
+                         hoverinfo="skip", showlegend=False))
+    fig.add_trace(go.Bar(x=[z2 - z1], y=[0], orientation="h", base=z1,
+                         marker=dict(color=zone_colors[1]),
+                         hoverinfo="skip", showlegend=False))
+    fig.add_trace(go.Bar(x=[z3 - z2], y=[0], orientation="h", base=z2,
+                         marker=dict(color=zone_colors[2]),
+                         hoverinfo="skip", showlegend=False))
+    # Ideal-range outline (dotted green box)
+    fig.add_shape(
+        type="rect",
+        x0=ideal_range[0], x1=ideal_range[1], y0=-0.18, y1=0.18,
+        line=dict(color=GREEN, width=1.5, dash="dot"),
+        fillcolor="rgba(0,0,0,0)",
     )
+    # Value marker (yellow vertical tick)
+    if value is not None:
+        clamped = max(z0, min(value, z3))
+        fig.add_trace(go.Scatter(
+            x=[clamped], y=[0], mode="markers",
+            marker=dict(symbol="line-ns", size=46, color=YELLOW,
+                        line=dict(color=BLACK, width=3)),
+            hovertemplate=f"Value: {display_val}<extra></extra>",
+            showlegend=False,
+        ))
+        # Number annotation above the tick
+        fig.add_annotation(
+            x=clamped, y=0.45, text=f"<b>{display_val}</b>",
+            showarrow=False, font=dict(color=YELLOW, size=14, family=PLOTLY_FONT),
+        )
 
-
-# ─────────────────────────────────────────────────────────────────────
-# PAGE 4 — VERDICT
-# ─────────────────────────────────────────────────────────────────────
-elif page == "Verdict":
-    st.markdown("<h1>Verdict</h1>", unsafe_allow_html=True)
-    st.markdown(
-        f"<p style='color:{SUBTLE};font-size:0.95rem;max-width:660px;margin-top:-4px;'>"
-        "Three-year scorecard, strategic synthesis, and the bottom-line take."
-        "</p>",
-        unsafe_allow_html=True,
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=PLOTLY_FONT, color=OFF_WHITE, size=11),
+        height=height,
+        margin=dict(l=4, r=4, t=10, b=22),
+        barmode="overlay",
+        bargap=0.3,
+        showlegend=False,
+        xaxis=dict(range=[z0, z3], showgrid=False, zeroline=False,
+                   color=SUBTLE, tickfont=dict(color=OFF_WHITE, size=10)),
+        yaxis=dict(visible=False, range=[-0.55, 0.6]),
     )
+    return fig
 
-    section_divider()
 
-    # ----- Headline number -----
-    c1, c2, c3 = st.columns([1, 1, 1], gap="large")
-    with c1:
-        st.markdown(
-            f"""
-            <div style='padding:6px 0;'>
-                <div style='color:{SUBTLE};font-size:0.78rem;font-weight:600;
-                            letter-spacing:0.14em;text-transform:uppercase;'>3-Yr Revenue CAGR</div>
-                <div style='font-size:2.6rem;font-weight:800;color:{YELLOW};
-                            line-height:1.1;'>+2.7%</div>
-                <div style='color:{OFF_WHITE};font-size:0.85rem;'>
-                    Mature, single-digit growth
-                </div>
-            </div>
-            """, unsafe_allow_html=True,
-        )
-    with c2:
-        st.markdown(
-            f"""
-            <div style='padding:6px 0;'>
-                <div style='color:{SUBTLE};font-size:0.78rem;font-weight:600;
-                            letter-spacing:0.14em;text-transform:uppercase;'>Cumulative FCF (3 yrs)</div>
-                <div style='font-size:2.6rem;font-weight:800;color:{GREEN};
-                            line-height:1.1;'>$21.1B</div>
-                <div style='color:{OFF_WHITE};font-size:0.85rem;'>
-                    100%+ of net income
-                </div>
-            </div>
-            """, unsafe_allow_html=True,
-        )
-    with c3:
-        st.markdown(
-            f"""
-            <div style='padding:6px 0;'>
-                <div style='color:{SUBTLE};font-size:0.78rem;font-weight:600;
-                            letter-spacing:0.14em;text-transform:uppercase;'>Cumulative Capital Returned</div>
-                <div style='font-size:2.6rem;font-weight:800;color:{YELLOW};
-                            line-height:1.1;'>$22.5B</div>
-                <div style='color:{OFF_WHITE};font-size:0.85rem;'>
-                    Dividends + buybacks
-                </div>
-            </div>
-            """, unsafe_allow_html=True,
-        )
+def heatmap_matrix(years, ratio_dict, height=460):
+    """Heatmap of ratios x years.
+    Colour intensity reflects how a ratio has changed vs the first year shown.
+    Cells display the actual ratio value."""
+    rows, normalised = [], []
+    for label, vals in ratio_dict.items():
+        rows.append(label)
+        first = next((v for v in vals if v is not None), None)
+        if first is None or first == 0:
+            normalised.append([0 if v is not None else None for v in vals])
+        else:
+            normalised.append([
+                ((v / first) - 1) if v is not None else None
+                for v in vals
+            ])
 
-    section_divider()
+    text = []
+    for label, vals in ratio_dict.items():
+        row_text = []
+        for v in vals:
+            if v is None:
+                row_text.append("—")
+            elif "%" in label or "margin" in label.lower() or "ROCE" in label or "ROA" in label or "payout" in label.lower() or "yield" in label.lower():
+                row_text.append(f"{v*100:.1f}%")
+            elif "ratio" in label.lower() or "turnover" in label.lower() or "coverage" in label.lower() or "EBITDA" in label or "P/E" in label:
+                row_text.append(f"{v:.2f}×")
+            elif "day" in label.lower() or "CCC" in label:
+                row_text.append(f"{v:.1f}d")
+            else:
+                row_text.append(f"{v:,.2f}")
+        text.append(row_text)
 
-    # ----- Heatmap (the scorecard) -----
-    st.markdown("### Three-year ratio heatmap")
-    st.markdown(
-        f"<p style='color:{SUBTLE};font-size:0.85rem;margin-top:-6px;'>"
-        "Cell colour shows change vs FY 2023 (green = improving, dim = deteriorating). "
-        "Numbers are the actual ratio values."
-        "</p>", unsafe_allow_html=True,
+    fig = go.Figure(go.Heatmap(
+        z=normalised, x=[str(y) for y in years], y=rows,
+        text=text, texttemplate="%{text}",
+        textfont=dict(color=WHITE, size=11, family=PLOTLY_FONT),
+        colorscale=[[0, "#3a2e0e"], [0.5, MID_GREY], [1, GREEN]],
+        zmid=0,
+        showscale=False,
+        hovertemplate="<b>%{y}</b><br>%{x}: %{text}<extra></extra>",
+        xgap=2, ygap=2,
+    ))
+    layout = base_layout(height=height, show_legend=False)
+    layout["margin"] = dict(l=10, r=10, t=10, b=20)
+    layout["yaxis"] = dict(autorange="reversed", color=OFF_WHITE,
+                           tickfont=dict(color=OFF_WHITE, size=11), automargin=True)
+    layout["xaxis"] = dict(
+        side="top", color=YELLOW,
+        tickfont=dict(color=YELLOW, size=12, family=PLOTLY_FONT),
+        type="category",
+        tickmode="array",
+        tickvals=[str(y) for y in years],
+        ticktext=[str(y) for y in years],
     )
-
-    heat_keys = [
-        "Operating margin (EBIT / Revenue)",
-        "EBITDA margin",
-        "Net margin (Net income / Revenue)",
-        "ROCE (NOPAT / Capital Employed)",
-        "ROA (Net income / Total assets)",
-        "Asset turnover (Revenue / Assets)",
-        "Cash Conversion Cycle (CCC)",
-        "Current ratio",
-        "Quick ratio",
-        "Interest coverage (EBIT / Interest)",
-        "Net Debt / EBITDA",
-        "Dividend payout ratio",
-        "P/E ratio",
-        "EV / EBITDA",
-    ]
-    heat_data = {k: row("ratios", k) for k in heat_keys}
-    fig = heatmap_matrix(YEARS, heat_data, height=520)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    section_divider()
-
-    # ----- Compact SWOT — plain typographic styling, no decorative symbols -----
-    st.markdown("### Strategic synthesis")
-
-    def swot_block(kind, title, items):
-        items_html = "".join(
-            f"<li><b>{t}</b> — {desc}</li>" for t, desc in items
-        )
-        return (
-            f"<div class='swot {kind}'>"
-            f"<h4>{title}</h4>"
-            f"<ul>{items_html}</ul>"
-            f"</div>"
-        )
-
-    c1, c2 = st.columns(2, gap="medium")
-    with c1:
-        st.markdown(
-            swot_block("ok", "Strengths", SWOT["strengths"]),
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
-        st.markdown(
-            swot_block("ok", "Opportunities", SWOT["opportunities"]),
-            unsafe_allow_html=True,
-        )
-    with c2:
-        st.markdown(
-            swot_block("warn", "Weaknesses", SWOT["weaknesses"]),
-            unsafe_allow_html=True,
-        )
-        st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
-        st.markdown(
-            swot_block("warn", "Threats", SWOT["threats"]),
-            unsafe_allow_html=True,
-        )
-
-    section_divider()
-
-    # ----- Final verdict (one short paragraph) -----
-    st.markdown(
-        f"""
-        <div style="background:{DARK_GREY};border:1px solid {MID_GREY};
-                    border-left:3px solid {GREEN};padding:22px 26px;border-radius:3px;">
-            <div style="color:{GREEN};font-size:0.78rem;font-weight:700;
-                        letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">
-                Final take
-            </div>
-            <p style="color:{WHITE};font-size:1rem;line-height:1.6;margin:0;">
-            Mature, efficient, and shareholder-friendly — executing consistently.
-            Flat EV/EBITDA, flat Net Debt/EBITDA, and ~$7B of cash returned each year all signal
-            <em>business as usual</em> in the best sense. The textbook ratio toolkit breaks down
-            on the equity side; ROCE, Net Debt/EBITDA, FCF yield, and the Cash Conversion Cycle
-            are the diagnostics that matter here.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        f"<div style='margin-top:28px;color:{SUBTLE};font-size:0.74rem;text-align:center;'>"
-        "Built with Streamlit &amp; Plotly · Source: McDonald's 10-K, FY 2023–2025"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    fig.update_layout(**layout)
+    return fig
