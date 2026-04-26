@@ -1,0 +1,104 @@
+Statement,Line item,2023,2024,2025
+Income Statement,Revenues from franchised restaurants,15437,15715,16548
+Income Statement,Sales by Company-owned and operated restaurants,9742,9782,9690
+Income Statement,Other revenues,316,423,647
+Income Statement,Total revenues,25494,25920,26885
+Income Statement,Franchised restaurants — occupancy expenses,2475,2536,2618
+Income Statement,Food & paper,3039,2995,3006
+Income Statement,Payroll & employee benefits,2886,2959,2905
+Income Statement,Occupancy & other operating expenses,2299,2381,2358
+Income Statement,Other restaurant expenses,232,339,564
+Income Statement,Depreciation and amortization (SG&A),382,447,457
+Income Statement,Other SG&A,2435,2412,2583
+Income Statement,"Other operating (income) expense, net",99,139,2
+Income Statement,Total operating costs and expenses,13847,14208,14492
+Income Statement,Operating income (EBIT),11647,11712,12393
+Income Statement,"Interest expense, net",1361,1506,1582
+Income Statement,"Nonoperating (income) expense, net",-236,-139,-87
+Income Statement,Income before income taxes,10522,10345,10897
+Income Statement,Provision for income taxes,2053,2121,2334
+Income Statement,Net income,8469,8223,8563
+Income Statement,EPS — basic ($),11.63,11.45,12.0
+Income Statement,EPS — diluted ($),11.56,11.39,11.95
+Income Statement,Dividends declared per share ($),6.23,6.78,7.17
+Income Statement,Weighted-avg shares basic (m),727.9,718.3,713.4
+Income Statement,Weighted-avg shares diluted (m),732.3,721.9,716.4
+Balance Sheet,Cash and equivalents,4579,1085,774
+Balance Sheet,Accounts and notes receivable,2488,2383,2466
+Balance Sheet,"Inventories, at cost",53,56,61
+Balance Sheet,Prepaid expenses and other current assets,866,1074,863
+Balance Sheet,Total current assets,7986,4599,4163
+Balance Sheet,Investments in and advances to affiliates,1080,2710,2820
+Balance Sheet,Goodwill,3040,3145,3354
+Balance Sheet,Miscellaneous other assets,5618,6095,6331
+Balance Sheet,Total other assets,9738,11950,12505
+Balance Sheet,"Lease right-of-use asset, net",13514,13339,14606
+Balance Sheet,"Property and equipment, at cost",43570,44177,49290
+Balance Sheet,Accumulated depreciation,-18662,-18882,-21049
+Balance Sheet,Net property and equipment,24908,25295,28241
+Balance Sheet,Total assets,56147,55182,59515
+Balance Sheet,Short-term borrowings & current LT debt,2192,0,0
+Balance Sheet,Accounts payable,1103,1029,1149
+Balance Sheet,Current lease liability,688,636,694
+Balance Sheet,Income taxes (current),705,361,250
+Balance Sheet,Other taxes (current),268,224,247
+Balance Sheet,Accrued interest,469,482,533
+Balance Sheet,Accrued payroll and other liabilities,1434,1129,1488
+Balance Sheet,Total current liabilities,6859,3861,4361
+Balance Sheet,Long-term debt,37153,38424,39973
+Balance Sheet,Long-term lease liability,13058,12888,14147
+Balance Sheet,Long-term income taxes,363,344,139
+Balance Sheet,Deferred revenues — initial franchise fees,790,778,945
+Balance Sheet,Other long-term liabilities,950,771,704
+Balance Sheet,Deferred income taxes,1681,1914,1038
+Balance Sheet,Common stock,17,17,17
+Balance Sheet,Additional paid-in capital,8893,9281,9641
+Balance Sheet,Retained earnings,63480,66834,70282
+Balance Sheet,Accumulated other comprehensive income (loss),-2456,-2553,-2414
+Balance Sheet,"Common stock in treasury, at cost",-74640,-77375,-79316
+Balance Sheet,Total shareholders' equity (deficit),-4707,-3797,-1791
+Balance Sheet,Total liabilities and equity,56147,55182,59515
+Cash Flow,Net income,8469,8223,8563
+Cash Flow,Depreciation and amortization (CFS),1978,2097,2199
+Cash Flow,Cash provided by operations (CFO),9612,9447,10551
+Cash Flow,Capital expenditures,-2357,-2775,-3365
+Cash Flow,Cash used for investing (CFI),-3185,-5346,-3822
+Cash Flow,Treasury stock purchases,-3054,-2824,-2056
+Cash Flow,Common stock dividends,-4533,-4870,-5115
+Cash Flow,Long-term financing issuances,5221,2380,4724
+Cash Flow,Long-term financing repayments,-2441,-2777,-4802
+Cash Flow,Cash used for financing (CFF),-4374,-7495,-7125
+Cash Flow,Free Cash Flow (CFO - CapEx),7255,6672,7186
+Cash Flow,Cash Conversion Ratio (CFO/NI),1.135,1.149,1.232
+Ratios,Operating margin (EBIT / Revenue),0.4569,0.4519,0.461
+Ratios,EBITDA margin,0.4719,0.4691,0.478
+Ratios,Net margin (Net income / Revenue),0.3322,0.3172,0.3185
+Ratios,EBITDA ($m),12029,12159,12850
+Ratios,ROCE (NOPAT / Capital Employed),,0.1602,0.1553
+Ratios,ROA (Net income / Total assets),0.1508,0.149,0.1439
+Ratios,ROE (meaningless — neg. equity),,-2.166,-4.781
+Ratios,Asset turnover (Revenue / Assets),0.4541,0.4697,0.4517
+Ratios,Days Sales Outstanding (DSO),35.62,33.1,33.02
+Ratios,Days Inventory Outstanding (DIO),6.36,6.73,7.31
+Ratios,Days Payable Outstanding (DPO),62.61,66.98,73.55
+Ratios,Cash Conversion Cycle (CCC),-20.63,-27.15,-33.22
+Ratios,PP&E turnover,,1.025,0.952
+Ratios,Current ratio,1.164,1.191,0.955
+Ratios,Quick ratio,1.156,1.177,0.941
+Ratios,Cash ratio,0.668,0.281,0.177
+Ratios,Total debt ratio (TL / TA),1.084,1.139,1.103
+Ratios,Interest coverage (EBIT / Interest),8.558,7.777,7.834
+Ratios,Net Debt / EBITDA,3.882,4.137,4.432
+Ratios,Net Debt ($m),46690,51892,55189
+Ratios,Dividend payout ratio,0.5354,0.5922,0.5973
+Ratios,Dividend yield,0.0213,0.0235,0.0235
+Ratios,P/E ratio,25.17,25.06,25.38
+Ratios,Closing share price ($),292.93,288.23,305.63
+Ratios,Market capitalization ($m),211789,206082,217303
+Ratios,Enterprise Value ($m),258479,257976,272492
+Ratios,EV / EBITDA,21.49,18.68,18.67
+Ratios,Working Capital ($m),1127,738,-198
+Ratios,Working Capital Need / WCN ($m),-1007,-1421,-1835
+Ratios,Net Cash position ($m),2387,2159,1638
+Ratios,Capital Employed ($m),44799,49162,53517
+Ratios,Invested Capital ($m),42446,48095,53398
